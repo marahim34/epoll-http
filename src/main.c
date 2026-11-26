@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 /* Requests whose headers do not fit in this buffer are rejected with 400. */
@@ -95,6 +96,32 @@ static void handle_client(int fd)
     send_response(fd, 200, "OK", "hello from epoll-http\n");
 }
 
+/*
+ * Close a client connection without losing the response we just sent.
+ *
+ * If we close() while the client's unread bytes are still in our receive
+ * buffer (for example the rest of an oversized request), the kernel answers
+ * with a TCP RST instead of a normal FIN, and the client's kernel discards the
+ * response it already received. So: tell the client we are done sending,
+ * drain what it is still sending for a short while, then close.
+ */
+static void close_lingering(int fd)
+{
+    char sink[4096];
+    size_t drained = 0;
+    struct timeval timeout = {.tv_sec = 1, .tv_usec = 0};
+
+    shutdown(fd, SHUT_WR);
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
+    while (drained < 64 * 1024) {
+        ssize_t n = read(fd, sink, sizeof sink);
+        if (n <= 0)
+            break; /* EOF, timeout or error: stop draining */
+        drained += (size_t)n;
+    }
+    close(fd);
+}
+
 static int open_listener(int port)
 {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -147,6 +174,6 @@ int main(int argc, char **argv)
             continue;
         }
         handle_client(client);
-        close(client);
+        close_lingering(client);
     }
 }
