@@ -2,23 +2,30 @@
 
 [![CI](https://github.com/marahim34/epoll-http/actions/workflows/ci.yml/badge.svg)](https://github.com/marahim34/epoll-http/actions/workflows/ci.yml)
 
-A small HTTP/1.1 server in C for Linux, built step by step: from a blocking
-one-client-at-a-time server to a non-blocking `epoll` event loop, measured
-against nginx along the way.
+A small HTTP/1.1 server in C for Linux that implements **the same server in
+every major Linux concurrency model** — blocking, thread-per-connection,
+thread pool, `poll`, `epoll` (level- and edge-triggered) and `io_uring` —
+behind one interface, then measures them against each other and against nginx.
 
 The goal is to understand what a production web server does underneath —
-sockets, partial reads and writes, event loops, keep-alive, back-pressure —
-by building one and testing it hard (sanitizers, fuzzing, load tests).
+sockets, partial reads and writes, event loops, keep-alive, back-pressure,
+sandboxing — by building one and testing it hard (sanitizers, fuzzing, load
+tests) and tracing it from the kernel with eBPF.
 
 ## Roadmap
 
 | Milestone | What it adds | Status |
 |---|---|---|
-| 1. Blocking server | `socket/bind/listen/accept`, read a full request, parse the request line, `200`/`400`/`404`/`405` | done |
-| 2. epoll event loop | Non-blocking sockets, one thread serving many clients, per-connection state machine | planned |
-| 3. Keep-alive and static files | Persistent connections, `Content-Length`, serving files with `sendfile` | planned |
-| 4. Hardening | Request size limits, timeouts for slow clients, AddressSanitizer + UBSan in CI, libFuzzer on the parser | planned |
-| 5. Benchmarks | Throughput and latency vs nginx with `wrk`, written up with graphs | planned |
+| 1. Blocking server | `socket/bind/listen/accept`, read a full request, parse the request line, `200`/`400`/`404`/`405`, lingering close | done |
+| 2. Threads | Thread per connection, then a fixed thread pool with a work queue; why threads stop scaling | next |
+| 3. Event loops | `poll()`, then `epoll` level- and edge-triggered; non-blocking sockets and a per-connection state machine | planned |
+| 4. HTTP done properly | Keep-alive, pipelining, chunked bodies, static files with zero-copy `sendfile` | planned |
+| 5. Hardening | Timeouts, slowloris defense, size limits, libFuzzer on the parser, sanitizers in CI | planned |
+| 6. io_uring | A completion-based backend next to the readiness-based ones | planned |
+| 7. Sandbox | Drop privileges, seccomp syscall filter, systemd socket activation | planned |
+| 8. Observability | `/metrics` endpoint, bpftrace scripts that trace the server from the kernel | planned |
+| 9. Benchmarks | Throughput and latency for every I/O model vs nginx with `wrk`, graphs and analysis | planned |
+| 10. TLS (stretch) | OpenSSL, then kernel TLS (kTLS) combined with `sendfile` | planned |
 
 ## Build and run
 
